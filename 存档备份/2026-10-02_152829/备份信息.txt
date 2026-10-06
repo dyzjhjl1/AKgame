@@ -1,0 +1,23 @@
+冒险王之神兵传奇  -  存档备份说明
+=====================================
+备份时间  ：2026-10-02 15:28:29
+脚本目录  ：C:\Users\Administrator\WorkBuddy AI\2026-10-02-00-51-27\AdventureKing-Offline
+存档来源  ：http://127.0.0.1:8124/__save__
+save.json ：1598 字节   md5=7e5227030631aed0d8fd22eb4c124a91
+本目录副本：md5=0c8b47efb8417b863f614b7c96d9c8b8
+附带备份  ：（无）
+
+【存档到底存在哪】
+  两份，位置不同：
+   (1) 浏览器 localStorage —— Ruffle 真正读写的那份。
+       键名固定为 127.0.0.1/gameload.swf/shengbingchuanqi
+       它按「浏览器配置目录 + 地址（含端口）」隔离，换浏览器 / 换端口 = 存档看不到。
+       物理文件在  %LOCALAPPDATA%\Microsoft\Edge\User Data\Default\Local Storage\leveldb\
+   (2) 游戏目录下的 save.json —— 页面每 5 秒把 (1) 镜像过来。
+       这份可以直接拷走。本文件夹里的 save.json 就是它。
+
+【怎么恢复】
+  1. 关掉游戏的浏览器标签页（服务窗口可以留着）；
+  2. 先双击 清空存档.bat 清一次（否则浏览器里的旧存档会盖回来）；
+  3. 把本文件夹里的 save.json 复制到游戏根目录（和 serve.ps1 同一层），覆盖同名文件；
+  4. 重新双击 开始游戏.bat，进游戏后选「继续游戏」。

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>冒险王之神兵传奇幸运无敌版 - 离线版</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden;
+               font-family: "Microsoft YaHei", system-ui, sans-serif; }
+  #container { width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+  #container ruffle-player { width: 100%; height: 100%; }
+  #warn {
+    position: fixed; inset: 0; display: none; z-index: 99;
+    background: #1b1b1b; color: #eee; padding: 40px; box-sizing: border-box;
+    line-height: 1.9; font-size: 15px; overflow: auto;
+  }
+  #warn h1 { font-size: 20px; color: #ffcc44; margin: 0 0 18px; }
+  #warn code { background: #2c2c2c; padding: 2px 7px; border-radius: 4px; color: #7fd6ff; }
+  #warn .big { color: #7dff9b; font-size: 17px; font-weight: bold; }
+  #assetwarn {
+    position: fixed; right: 10px; bottom: 10px; z-index: 50; display: none;
+    max-width: 46vw; max-height: 32vh; overflow: auto;
+    background: rgba(20,20,20,.92); color: #ffd166; border: 1px solid #7a5c00;
+    border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.6;
+  }
+  #assetwarn b { color: #ff8b6b; }
+  #assetwarn ul { margin: 6px 0 0 18px; padding: 0; }
+  #assetwarn li { word-break: break-all; color: #ddd; }
+  #reset {
+    position: fixed; inset: 0; display: none; z-index: 99;
+    background: #1b1b1b; color: #eee; padding: 40px; box-sizing: border-box;
+    line-height: 1.9; font-size: 15px; overflow: auto;
+  }
+  #reset h1 { font-size: 20px; color: #ff8b6b; margin: 0 0 18px; }
+  #reset b { color: #ffcc44; }
+  #reset code { background: #2c2c2c; padding: 2px 7px; border-radius: 4px; color: #7fd6ff; }
+  #reset button {
+    margin-top: 12px; padding: 10px 24px; font-size: 15px; cursor: pointer;
+    background: #a32d2d; color: #fff; border: 0; border-radius: 6px; font-family: inherit;
+  }
+  #reset button:hover { background: #c0392b; }
+  #resetmsg { margin-top: 20px; color: #7dff9b; }
+  #resetmsg.bad { color: #ffd166; }
+</style>
+</head>
+<body>
+<div id="container"></div>
+
+<div id="warn">
+  <h1>请用「开始游戏.bat」启动，不要直接双击 index.html</h1>
+  <p>这个游戏用 <b>Ruffle</b>（Flash 模拟器）来运行，它的核心 <code>.wasm</code> 文件
+     必须通过 <b>http://</b> 协议加载。直接双击 html 打开时地址是 <code>file://...</code>，
+     浏览器会拒绝加载，画面会一直黑屏。</p>
+  <p class="big">正确做法：双击文件夹里的「开始游戏.bat」</p>
+  <p>它会自动在本机开一个小型网页服务并打开浏览器，游戏就能正常玩了。</p>
+  <p style="color:#9fe1cb;font-size:14px;margin-top:18px">
+    顺便说清楚：那个黑色窗口是「迷你网页服务器」，<b>只在你电脑内部工作</b> ——
+    不联网、不改系统设置、不需要管理员权限、外人也连不上。
+    <code>127.0.0.1</code> 就是「这台电脑自己」的意思（= localhost），
+    <b>不是</b>在创建什么 IP。它必须开着，关掉它游戏就打不开了。
+  </p>
+  <p style="color:#ffb4a2;font-size:14px">
+    另外：用 <code>flashplayer_sa.exe</code> 或 Ruffle 桌面版直接开 <code>game.swf</code>
+    都是走不通的（会卡在「开始游戏」）—— 因为只有浏览器能提供游戏启动时要的那个接口。
+    细节见 <code>使用说明.txt</code> 的 §〇.5。
+  </p>
+  <p style="color:#999;font-size:13px;margin-top:24px">
+    如果你确实想手动启动，也可以在命令行里执行：<br>
+    <code>powershell -ExecutionPolicy Bypass -File serve.ps1</code><br>
+    然后浏览器打开窗口里提示的地址（默认 http://127.0.0.1:8777/index.html）。
+  </p>
+</div>
+
+<div id="assetwarn"></div>
+
+<div id="reset">
+  <h1>清空存档</h1>
+  <p>这个页面会把当前地址（<code id="resetOrigin"></code>）下的游戏存档<b>彻底清掉</b>，清掉之后<b>无法恢复</b>。</p>
+  <p>做之前请先确认：<b>游戏的浏览器标签页已经关掉了</b>。<br>
+     如果游戏还开着，它会在几秒钟内把旧存档写回来，这次清档就白做了。</p>
+  <p>想先留个底，就去双击文件夹里的 <code>备份存档.bat</code>。</p>
+  <button id="resetgo">确认清空存档</button>
+  <div id="resetmsg"></div>
+</div>
+
+<script>
+/* =====================================================================
+   启动页脚本（在 ruffle.js 之前执行）
+   1) 资源缺失兜底  —— 防止"进度条永久卡死"
+   2) 存档桥        —— 让存档不再绑定浏览器 / 端口
+   3) 启动 Ruffle
+   ===================================================================== */
+(function () {
+  "use strict";
+
+  var IS_FILE = (location.protocol === "file:");
+
+  /* ------------------------------------------------------------------
+     0) 清档模式  index.html?reset=1
+     ------------------------------------------------------------------
+     存档其实有两份：
+       · 浏览器 localStorage —— Ruffle 真正读写的那份（按 地址+端口 隔离）
+       · 服务器上的 save.json —— 页面每 5 秒镜像一次的备份
+     所以「只删 save.json」是没用的：浏览器里那份会在 5 秒内又把它写回来。
+     真正能清干净的办法，只能是「在同一个地址下打开的页面」里动手：
+       清空 localStorage ＋ 把服务器上的镜像也置空。
+     这就是这个 ?reset=1 模式存在的理由。它不会启动游戏。
+     ------------------------------------------------------------------ */
+  var RESET = /(^|[?&])reset=1(&|$)/.test(location.search);
+
+  function wireReset() {
+    var box = document.getElementById("reset");
+    if (!box) { return; }
+    box.style.display = "block";
+    var o = document.getElementById("resetOrigin");
+    if (o) { o.textContent = location.origin; }
+
+    document.getElementById("resetgo").onclick = function () {
+      var cleared = 0, keys = [], i;
+      try {
+        for (i = 0; i < localStorage.length; i++) { keys.push(localStorage.key(i)); }
+        for (i = 0; i < keys.length; i++) { localStorage.removeItem(keys[i]); cleared++; }
+      } catch (e) { /* 隐私模式可能不让读，忽略 */ }
+
+      var mirrored = false;
+      try {
+        var x = new XMLHttpRequest();
+        x.open("POST", "__save__", false);   // 同步，保证顺序
+        x.setRequestHeader("Content-Type", "application/json");
+        x.send("{}");
+        mirrored = (x.status === 200);
+      } catch (e) { /* 忽略 */ }
+
+      var msg = document.getElementById("resetmsg");
+      if (mirrored) {
+        msg.className = "";
+        msg.innerHTML = "已清空浏览器里的 " + cleared + " 项存档记录，"
+          + "服务器上的 save.json 也已置空。<br><br>"
+          + "现在可以关掉这个页面，重新双击「开始游戏.bat」从零开始了。";
+      } else {
+        msg.className = "bad";
+        msg.innerHTML = "已清空浏览器里的 " + cleared + " 项存档记录，"
+          + "但服务器上的 save.json 没能置空（服务没在跑？）。<br><br>"
+          + "请手动删掉游戏目录下的 save.json，再重新启动游戏。";
+      }
+      document.getElementById("resetgo").disabled = true;
+      document.getElementById("resetgo").textContent = "已清空";
+    };
+  }
+
+  /* ------------------------------------------------------------------
+     1) 资源缺失兜底
+     ------------------------------------------------------------------
+     游戏的关卡加载器只监听 Event.COMPLETE，没有监听 IO_ERROR。
+     所以只要有一个资源 404，那个进度条就会永远卡住、再也回不来
+     （已经踩过两次坑：/monster/b1mc.swf、/monster/pet3_1mc.swf）。
+
+     这里拦截所有 fetch：如果 .swf 拿不到，就返回一个"合法的空影片"，
+     让加载器正常走完流程，游戏至少能继续；同时把缺失的文件名报到
+     服务器上，方便之后补齐。
+     ------------------------------------------------------------------ */
+  var EMPTY_SWF = new Uint8Array([
+    0x46, 0x57, 0x53,             /* "FWS" 未压缩 SWF            */
+    0x09,                         /* 版本 9                      */
+    0x0F, 0x00, 0x00, 0x00,       /* 文件长度 15（小端）          */
+    0x00,                         /* RECT：全 0 的空舞台          */
+    0x00, 0x0C,                   /* 帧率 12fps                  */
+    0x01, 0x00,                   /* 1 帧                        */
+    0x00, 0x00                    /* End tag                     */
+  ]);
+
+  function isSwf(u) { return /\.swf(\?|#|$)/i.test(String(u)); }
+
+  function absUrl(u) {
+    try { return new URL(String(u), location.href).href; } catch (e) { return String(u); }
+  }
+
+  var reported = {}, missing = [];
+
+  function showAssetWarn() {
+    var box = document.getElementById("assetwarn");
+    if (!box) { return; }
+    box.style.display = "block";
+    var html = "<b>有 " + missing.length + " 个资源没找到</b>（已用空影片顶替，游戏可继续）";
+    html += "<ul>";
+    for (var i = 0; i < missing.length && i < 12; i++) {
+      html += "<li>" + missing[i].replace(/[<>&]/g, "") + "</li>";
+    }
+    html += "</ul>";
+    box.innerHTML = html;
+  }
+
+  function report(url, why) {
+    var a = absUrl(url);
+    var tag = a + " | " + why;
+    if (reported[tag]) { return; }
+    reported[tag] = 1;
+    missing.push(a.replace(location.origin, ""));
+    try { console.warn("[asset] missing:", a, why); } catch (e) {}
+    try {
+      var x = new XMLHttpRequest();
+      x.open("POST", "__missing__", true);
+      x.setRequestHeader("Content-Type", "application/json");
+      x.send(JSON.stringify({ url: a, why: why }));
+    } catch (e) {}
+    try { showAssetWarn(); } catch (e) {}
+  }
+
+  function stubResponse(url, why) {
+    report(url, why);
+    return new Response(EMPTY_SWF, {
+      status: 200,
+      statusText: "OK",
+      headers: {
+        "Content-Type": "application/x-shockwave-flash",
+        "Content-Length": String(EMPTY_SWF.length)
+      }
+    });
+  }
+
+  var nativeFetch = window.fetch;
+  if (nativeFetch) {
+    window.fetch = function (input, init) {
+      var url = (typeof input === "string") ? input : (input && input.url) || "";
+      return nativeFetch.apply(this, arguments).then(function (res) {
+        if (!res || res.ok) { return res; }
+        if (isSwf(url)) { return stubResponse(url, "fetch " + res.status); }
+        report(url, "fetch " + res.status);
+        return res;
+      }, function (err) {
+        if (isSwf(url)) { return stubResponse(url, "fetch error"); }
+        report(url, "fetch error");
+        throw err;
+      });
+    };
+  }
+
+  /* ------------------------------------------------------------------
+     2) 存档桥
+     ------------------------------------------------------------------
+     Ruffle 把游戏存档放在 localStorage（SharedObject），它同时绑定
+     "浏览器配置目录" 和 "地址（含端口）"。所以换浏览器 / 换端口 = 存档没了。
+     这里把 localStorage 镜像到游戏目录下的 save.json，启动时再放回去。
+     ------------------------------------------------------------------ */
+  var SAVE_ENDPOINT = "__save__";
+  var SAVE_INTERVAL_MS = 5000;
+
+  function collectStore() {
+    try {
+      var out = {}, i, k;
+      for (i = 0; i < localStorage.length; i++) {
+        k = localStorage.key(i);
+        if (k) { out[k] = localStorage.getItem(k); }
+      }
+      return out;
+    } catch (e) { return null; }
+  }
+
+  function backupSave(sync) {
+    var store = collectStore();
+    if (!store || Object.keys(store).length === 0) { return; }
+    try {
+      var x = new XMLHttpRequest();
+      x.open("POST", SAVE_ENDPOINT, !!sync);
+      x.setRequestHeader("Content-Type", "application/json");
+      x.send(JSON.stringify(store));
+    } catch (e) { /* 服务端不支持也无所谓 */ }
+  }
+
+  function restoreSave(done) {
+    try {
+      var x = new XMLHttpRequest();
+      x.open("GET", SAVE_ENDPOINT, true);
+      x.onload = function () {
+        if (x.status === 200 && x.responseText) {
+          try {
+            var store = JSON.parse(x.responseText), k;
+            for (k in store) {
+              if (Object.prototype.hasOwnProperty.call(store, k)) {
+                localStorage.setItem(k, store[k]);
+              }
+            }
+          } catch (e) { /* 文件坏了就忽略 */ }
+        }
+        done();
+      };
+      x.onerror = function () { done(); };
+      x.send();
+    } catch (e) { done(); }
+  }
+
+  /* ------------------------------------------------------------------
+     3) 启动 Ruffle
+     ------------------------------------------------------------------ */
+  window.RufflePlayer = window.RufflePlayer || {};
+  window.RufflePlayer.config = {
+    autoplay: "on",
+    unmuteOverlay: "hidden",
+    letterbox: "on",
+    scale: "showAll",
+    quality: "high",
+    warnOnUnsupportedContent: false,
+    logLevel: "warn",
+    allowScriptAccess: true,
+    contextMenu: "rightClickOnly",
+    /* Ruffle 默认用内置字体渲染"设备字体"(SimSun/SimHei 等)，
+       而内置字体没有中文字形，于是背包/强化/宠物界面里的中文
+       全变成星号或空白。改成 canvas 后交给浏览器渲染，中文正常。 */
+    deviceFontRenderer: "canvas"
+  };
+
+  window.__ruffleReady = false;
+
+  function startGame() {
+    try {
+      var ruffle = window.RufflePlayer.newest();
+      var player = ruffle.createPlayer();
+      document.getElementById("container").appendChild(player);
+      var inst = player.ruffle();
+      // 注意：Ruffle 的 player API 没有 addEventListener，调用会抛异常，
+      // 所以后面不能依赖它。
+      inst.load("gameload.swf");
+      window.__player = inst;
+      window.__ruffleReady = true;
+    } catch (e) {
+      console.error("Ruffle init failed:", e);
+      var w = document.getElementById("warn");
+      w.style.display = "block";
+      w.querySelector("h1").textContent = "游戏启动失败：" + e;
+    }
+  }
+
+  window.addEventListener("DOMContentLoaded", function () {
+    if (IS_FILE) { return; }
+    if (RESET) { wireReset(); return; }   // 清档模式：不启动游戏
+    restoreSave(function () {
+      startGame();
+      setInterval(function () { backupSave(false); }, SAVE_INTERVAL_MS);
+      window.addEventListener("beforeunload", function () { backupSave(true); });
+      document.addEventListener("visibilitychange", function () {
+        if (document.visibilityState === "hidden") { backupSave(true); }
+      });
+    });
+  });
+})();
+</script>
+<script src="ruffle/ruffle.js"></script>
+</body>
+</html>
